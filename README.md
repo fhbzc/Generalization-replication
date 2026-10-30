@@ -88,7 +88,7 @@ often about *using* the work or pointing to *future* work. Extension citations a
 The disruption index treats a paper as disruptive when later work cites it without citing its
 predecessors. The F / E / G indices separate two very different kinds of "disruptive" papers.
 
-<p align="center"><img src="docs/figures/fig2a_disruptive_examples.png" width="600" alt="Fig. 2a: highly disruptive papers from foundational to generalizational"></p>
+<p align="center"><img src="docs/figures/fig2a_disruptive_examples.png" width="680" alt="Fig. 2a: highly disruptive papers from foundational to generalizational"></p>
 
 **Fig. 2a.** Five highly disruptive papers (all above the 82nd percentile of disruption),
 arranged from most foundational to most generalizational, with their downstream citation trees.
@@ -96,6 +96,16 @@ CRISPR (left, top) has a deep, narrow tree: research keeps building on it genera
 generation (Foundation 0.89, 100th percentile). ImageJ (right, top) has a shallow, broad tree:
 it is used by many unconnected works (Generalization 0.79, 98.9th percentile). Values in
 parentheses are percentiles within the same year and domain.
+
+<p align="center"><img src="docs/figures/ed4_review_vs_references.png" width="80%" alt="Extended Data Fig. 4: review articles vs their references"></p>
+
+**Extended Data Fig. 4.** Review articles against the papers they cite, in Web of Science
+(18,367 reviews from "annual review" venues and their 1,319,022 references). Each index is
+converted to a quantile within publication year and domain, and the curves show the
+distribution of those quantiles. The cited references, which are presumably influential prior
+work, rank higher on **Foundation** (mean quantile 0.598 vs 0.461). Reviews, which are read and
+cited broadly, rank higher on **Generalization** (0.539 vs 0.423). The disruption index ranks the
+reviews *above* the work they review (0.474 vs 0.436).
 
 <p align="center"><img src="docs/figures/ed5a_disruption_comparison.png" width="75%" alt="Extended Data Fig. 5a: indices compared with disruption"></p>
 
