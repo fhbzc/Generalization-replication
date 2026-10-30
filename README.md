@@ -1,38 +1,114 @@
-# Replication package
+# Generalization and the Rise of System-level Creativity in Science
 
-Code behind the Foundation / Extension / Generalization (F / E / G) indices and every figure
-built on them. The same analysis is run independently on four corpora — OpenAlex (the main one),
-Web of Science, Semantic Scholar and MAG — each in its own directory with its own `utils.py` and
-`data/` root.
+[![arXiv](https://img.shields.io/badge/arXiv-2510.03240-b31b1b.svg)](https://arxiv.org/abs/2510.03240)
+[![Data DOI](https://img.shields.io/badge/data-10.5281%2Fzenodo.23817258-blue.svg)](https://doi.org/10.5281/zenodo.23817258)
 
-## The idea
+Replication package for **Hongbo Fang and James Evans, "Generalization and the Rise of
+System-level Creativity in Science"**, [arXiv:2510.03240](https://arxiv.org/abs/2510.03240).
 
-A citation count says *how much* a paper is used, not *how*. We classify each citation by
-where the citing paper sits relative to the focal paper's local citation network. For every
-paper that cites the focal paper (within 5 years), we count how many of the focal paper's own
-**references** it also cites (upstream) and how many of the focal paper's **other citing papers**
-it also cites (downstream):
+Most measures of innovation look at what a paper *draws on*. This paper instead measures how a
+paper's knowledge is *taken up* by later work. Using citation networks covering tens of millions
+of papers, each paper's contribution is split into three roles: **Foundation**, **Extension**,
+and **Generalization**. Foundational and extensional work dominated the post-war decades and
+declined after the 1990s. Generalization, where an idea is reused in contexts far from where it
+came from, rose sharply over the same period. The paper argues that this challenges the
+"declining innovation" story told by the disruption index, and that innovation has moved from
+within disciplines to between them.
 
-- **Extension (E)** — upstream > downstream: the citing paper continues the line of work the
-  focal paper itself built on.
-- **Foundation (F)** — downstream > upstream: the citing paper joins a community that builds on
-  the focal paper together, which becomes a shared foundation.
-- **Generalization (G)** — neither: the citing paper connects to none of the focal paper's
-  neighbourhood, i.e. the idea has been carried into a context that is disconnected from where
-  it came from.
+| | |
+|---|---|
+| 📄 Paper | <https://arxiv.org/abs/2510.03240> |
+| 💻 Code + figure data (this repository) | <https://github.com/fhbzc/Generalization-replication> |
+| 🗄️ Paper-level F / E / G indices (OpenAlex, Semantic Scholar) | Zenodo: [10.5281/zenodo.23817258](https://doi.org/10.5281/zenodo.23817258) |
+
+## The idea: three ways a paper gets used
+
+Each paper that cites a focal paper (within 5 years) is classified by where it sits in the
+focal paper's local citation network. We count how many of the focal paper's own **references**
+it also cites (upstream) and how many of the focal paper's **other citing papers** it also cites
+(downstream).
+
+```mermaid
+flowchart BT
+    subgraph EXT["Extension: upstream > downstream"]
+        direction BT
+        C1["citing paper"] --> P1(("focal"))
+        P1 --> R1["focal's reference"]
+        C1 --> R1
+    end
+    subgraph FND["Foundation: downstream > upstream"]
+        direction BT
+        C2["citing paper"] --> P2(("focal"))
+        D2["another citer of focal"] --> P2
+        C2 --> D2
+    end
+    subgraph GEN["Generalization: neither"]
+        direction BT
+        C3["citing paper"] --> P3(("focal"))
+        P3 --> R3["focal's reference"]
+        D3["another citer of focal"] --> P3
+    end
+```
+<sub>Arrows mean "cites".</sub>
+
+- **Extension (E)**: the citing paper continues the line of work the focal paper itself built on.
+- **Foundation (F)**: the citing paper joins a community building on the focal paper, which
+  becomes a shared foundation.
+- **Generalization (G)**: the citing paper is connected to none of the focal paper's
+  neighbourhood. The idea has been carried into a new context.
 
 Ties are split 0.5 / 0.5 between E and F. Each index is the share of the focal paper's citations
-of that kind, so F + E + G = 1. The repository computes these indices on four corpora, tracks
-how they change over time, validates them against text, reference, and venue distances and
-citation-purpose labels, and compares them with a degree-preserving reshuffled citation network
-as a null model.
+of that kind, so F + E + G = 1.
 
-## Where things are
+## Key results
 
-| Content | Location |
-|---|---|
-| Code and figure data (this repository) | GitHub: <https://github.com/fhbzc/Generalization-replication> |
-| Paper-level F / E / G indices for OpenAlex and S2AG | Zenodo: [10.5281/zenodo.23817258](https://doi.org/10.5281/zenodo.23817258) |
+**The rise of generalization.** Yearly mean of the three indices by publication year, in
+OpenAlex (solid) and Web of Science (dashed). Foundation falls steadily. Extension peaks in the
+mid-1990s and then declines, and Generalization rises sharply after the 1990s. The two corpora
+agree closely.
+
+![Fig. 3a](figure_graph/Fig.%203a.svg)
+<sub>`figure_graph/Fig. 3a.svg`, drawn by `combine_wos_openalex/plot_longitudional_change.py`.</sub>
+
+**Not an artefact of the citation network.** Observed indices (colour) against the same indices
+on a randomized citation network (grey) that keeps each paper's citation counts and venue
+fixed. Insets show the change since 1990. Generalization rises by about 0.2 in the observed
+network, while the randomized network moves far less.
+
+![Fig. 3b](figure_graph/Fig.%203b.svg)
+<sub>`figure_graph/Fig. 3b.svg`, drawn by `combine_wos_openalex/visualize_efg_obs_vs_single_iter_control_venue_combined.py`.</sub>
+
+**Validation against distance.** Median index across bins of reference distance (venue
+embeddings) and semantic distance (title embeddings). The three indices occupy different
+regions of the distance space.
+
+![Fig. 2b](figure_graph/Fig.%202b.svg)
+<sub>`figure_graph/Fig. 2b.svg`, drawn by `openalex/heatmap/visualize_within_dist_heatmap.py`.</sub>
+
+**Paper-level data.** The distribution of the three indices in the Zenodo release is almost
+identical between OpenAlex and Semantic Scholar.
+
+![E/F/G distribution](figure_graph/efg_distribution.png)
+<sub>`figure_graph/efg_distribution.png`, drawn by `openalex/feg_distribution/plot_efg_distribution_public_release.py`.</sub>
+
+Every figure in the paper is in [`figure_graph/`](figure_graph), together with the CSV of the
+numbers it plots.
+
+## Citation
+
+```bibtex
+@article{fang2025generalization,
+  title   = {Generalization and the Rise of System-level Creativity in Science},
+  author  = {Fang, Hongbo and Evans, James},
+  journal = {arXiv preprint arXiv:2510.03240},
+  year    = {2025}
+}
+```
+
+## Repository layout
+
+The same analysis is run independently on four corpora: OpenAlex (the main one), Web of Science,
+Semantic Scholar and MAG. Each has its own directory with its own `utils.py` and `data/` root.
 
 ## Results
 
