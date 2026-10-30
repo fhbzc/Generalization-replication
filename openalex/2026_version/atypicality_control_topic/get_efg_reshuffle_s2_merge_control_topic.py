@@ -1,0 +1,148 @@
+"""
+Merge the per-division E/F/G output produced by get_efg_reshuffle_control_topic.py (the
+topic-controlled reshuffled / null-model network variant) into a single concatenated table.
+
+This is the topic-hierarchy twin of
+atypicality_control_venue/get_efg_reshuffle_s2_merge_control_venue.py and behaves the same
+way: it only concatenates the per-division shards. No pub_year / reference / citation
+filtering is applied here -- downstream scripts apply their own thresholds. Multiple
+reshuffle iterations are processed sequentially, one merged output per iteration; an
+iteration whose merged CSV already exists is skipped (resumable). An iteration is also
+skipped (not merged) unless every division has its finished marker, so a partially-computed
+shuffle is never merged. It reads from / writes to the efg_computation_control_<level>/
+tree (level = CONTROL_LEVEL) so it never collides with the venue / uncontrolled outputs.
+
+Input  : META_DIRE_2026/efg_computation_control_<level>/
+           gen_V3_y{year_offset}_iter{iteration}_before_{upper_year}_d_{division}_max_{division_count}.csv
+           (+ ..._finished_... markers) from get_efg_reshuffle_control_topic.py
+Output : META_DIRE_2026/efg_computation_control_<level>/
+           gen_V3_y{year_offset}_iter{iteration}_before_{upper_year}.csv   (one per iteration)
+"""
+
+import os
+import pickle
+from tqdm import tqdm
+from collections import OrderedDict, defaultdict
+import pandas as pd
+import numpy as np
+import sys
+
+# utils.py is in openalex/, two levels up from this file
+# (openalex/2026_version/atypicality_control_topic/<this file>).
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OPENALEX_DIR = os.path.dirname(os.path.dirname(BASE_DIR))
+sys.path.insert(0, OPENALEX_DIR)
+from utils import META_DIRE_2026  # noqa: E402
+
+# ---- which topic level to control for --------------------------------------------------
+# one of: 'topic', 'subfield', 'field', 'domain'; must match get_efg_reshuffle_control_topic.py.
+CONTROL_LEVEL = 'field'
+assert CONTROL_LEVEL in ('topic', 'subfield', 'field', 'domain')
+print("CONTROL_LEVEL", CONTROL_LEVEL)
+
+# the observed run is the single shared subfield-filtered network (labelled by FILTER_LEVEL,
+# not CONTROL_LEVEL); must match get_efg_reshuffle_control_topic.py.
+FILTER_LEVEL = 'subfield'
+print("FILTER_LEVEL", FILTER_LEVEL)
+
+meta_dire = META_DIRE_2026
+print("meta_dire", meta_dire)
+
+division_count = 20
+print("division_count", division_count)
+
+# Both the OBSERVED and the reshuffled shards live in ONE fixed folder,
+# efg_computation_control_2026 (no level in the folder name), told apart only by file name
+# (obs -> _obs_valid_primary_subfield...; reshuffle -> _control_<level>_iter{n}...).
+load_dire = os.path.join(meta_dire, 'efg_computation_control_2026')
+
+year_offset = 1  # -1 for no offset; must match get_efg_reshuffle_control_topic.py
+print("year_offset", year_offset)
+
+# must match get_efg_reshuffle_control_topic.py: selects which shards to merge,
+# processed sequentially (one output each). Each entry is either an int reshuffle
+# iteration, or None for the OBSERVED topic-filtered run (target_iteration=None there).
+# each observed network is reshuffled only ONCE: the observed run (None) + iteration 0.
+iteration_list = [0]
+# keep a deterministic order; None (observed) first, then the int iterations sorted.
+# (plain sorted() would raise on a mix of None and ints).
+iteration_list = ([it for it in iteration_list if it is None]
+                  + sorted(it for it in iteration_list if it is not None))
+upper_year = 2025  # must match the upper_year used in get_efg_reshuffle_control_topic.py
+print("iteration_list", iteration_list)
+print("upper_year", upper_year)
+
+
+def make_file_suffix(target_iteration):
+    """File suffix for a target, matching get_efg_reshuffle_control_topic.py exactly:
+    None -> the observed topic-filtered run; an int -> that reshuffle iteration."""
+    if target_iteration is None:
+        return f'_obs_valid_primary_{FILTER_LEVEL}_before_{upper_year}'
+    return f'_control_{CONTROL_LEVEL}_iter{target_iteration}_before_{upper_year}'
+
+
+def merge_iteration(target_iteration):
+    """Concatenate the per-division shards of a single target and save. `target_iteration`
+    is an int reshuffle iteration, or None for the observed topic-filtered run."""
+    label = 'obs' if target_iteration is None else f'iter {target_iteration}'
+    file_suffix = make_file_suffix(target_iteration)
+    print("file_suffix", file_suffix)
+
+    save_path = os.path.join(
+        load_dire,
+        f'gen_V3_y{year_offset}{file_suffix}.csv'
+    )
+
+    # ----- 0. skip if this target is already merged -----
+    if os.path.exists(save_path):
+        print(f"{label}: already merged, skip:", save_path)
+        return
+
+    # ----- 0b. require EVERY division's finished marker; otherwise skip this
+    #            iteration (it isn't fully computed yet) instead of merging a
+    #            partial result -----
+    missing = [
+        division_index
+        for division_index in range(division_count)
+        if not os.path.exists(os.path.join(
+            load_dire,
+            f'gen_V3_y{year_offset}{file_suffix}_finished_d_{division_index}_max_{division_count}.pkl'
+        ))
+    ]
+    if missing:
+        print(f"{label}: not all divisions finished, skip "
+              f"(missing finished markers for divisions {missing})")
+        return
+
+    # ----- 1. load & concat all divisions -----
+    df_list = []
+    for division_index in tqdm(range(division_count),
+                               desc=f"{label}: loading divisions"):
+        csv_path = os.path.join(
+            load_dire,
+            f'gen_V3_y{year_offset}{file_suffix}_d_{division_index}_max_{division_count}.csv'
+        )
+        assert os.path.exists(csv_path)
+
+        df = pd.read_csv(csv_path)
+        df_list.append(df)
+
+    df_res = pd.concat(df_list, ignore_index=True)
+    print(f"{label}: concat df shape:", df_res.shape)
+
+    # ----- 2. save -----
+    # No filtering here: this step only concatenates the per-division output.
+    # Downstream scripts apply their own pub_year / reference / citation thresholds.
+    df_res.to_csv(save_path, index=False)
+    print(f"{label}: saved to:", save_path)
+
+
+# ==================================================
+# process every iteration sequentially
+# ==================================================
+for target_iteration in iteration_list:
+    print("=" * 50)
+    print("processing target_iteration", target_iteration)
+    merge_iteration(target_iteration)
+
+print("finished")

@@ -1,0 +1,37 @@
+panel,type_a,type_b,p_value,stars
+Frequency,F,E,4.616240712020278e-180,***
+Frequency,F,G,2.1255913829921834e-232,***
+Frequency,F,D,4.370383510332567e-174,***
+Frequency,E,G,0.0,***
+Frequency,E,D,0.0,***
+Frequency,G,D,6.7516331683712765e-18,***
+Background,F,E,1.4383075350974093e-100,***
+Background,F,G,0.014750290307828212,*
+Background,F,D,0.8534762888344343,ns
+Background,E,G,1.3498677330123794e-41,***
+Background,E,D,4.3052687008989145e-97,***
+Background,G,D,0.010882353463883583,*
+Future,F,E,0.06820716757441596,ns(.)
+Future,F,G,1.4723155823201887e-81,***
+Future,F,D,3.9584016127559577e-53,***
+Future,E,G,1.209011664179278e-73,***
+Future,E,D,6.96305374910249e-44,***
+Future,G,D,7.126545429128234e-17,***
+Intent To Modify,F,E,0.0,***
+Intent To Modify,F,G,4.176537139673485e-45,***
+Intent To Modify,F,D,1.750853712676858e-60,***
+Intent To Modify,E,G,0.0,***
+Intent To Modify,E,D,0.0,***
+Intent To Modify,G,D,0.3374471727076058,ns
+Motivation,F,E,7.777895742673825e-05,***
+Motivation,F,G,1.9514089813022793e-13,***
+Motivation,F,D,4.168265291860852e-08,***
+Motivation,E,G,1.1817689686955601e-05,***
+Motivation,E,D,0.08084036148151405,ns(.)
+Motivation,G,D,0.0035704176335507078,**
+Uses,F,E,1.8881529268713894e-61,***
+Uses,F,G,7.03985298310118e-17,***
+Uses,F,D,8.204594859178541e-23,***
+Uses,E,G,1.7164351385864204e-95,***
+Uses,E,D,1.972669274929587e-150,***
+Uses,G,D,0.5076877705295874,ns

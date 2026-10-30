@@ -1,0 +1,2 @@
+ACT2: A multi-disciplinary semi-structured dataset for importance and
+purpose classification of citations

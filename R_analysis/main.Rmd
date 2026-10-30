@@ -1,0 +1,302 @@
+### The dynamic change of Foundation, Extension, Generalization (Replicate Table S3, S4)
+```{r}
+library(data.table)
+library(modelsummary)
+library(stargazer)
+library(fixest)
+
+# input: get_efg_s3_merge_with_concept.py output (gen_V3 columns + top_concept,
+# already filtered rt>=1 / ct>=5 / pub_year<2025). Paths are relative to this
+# Rmd's directory (knitr sets the working dir there). Columns are renamed to the
+# names used by the models below.
+df <- fread("../openalex/data/efg_computation/gen_V3_y5_with_top_concept_rt_1_ct_5_ybefore_2025.csv",
+            select = c("pub_year", "citation_count_y5", "up_refer_count", "f_y5", "e_y5", "g_y5", "top_concept"))
+setnames(df,
+         old = c("citation_count_y5", "f_y5", "e_y5", "g_y5"),
+         new = c("citation_count", "foundation", "extension", "generalization"))
+
+df = subset(df, citation_count >= 5)
+df_p1 = subset(df, pub_year < 1991 & pub_year >= 1945)
+df_p2 = subset(df, pub_year >= 1991 & pub_year < 2020)
+
+### the first period
+
+hist(log(df_p1$citation_count+1))
+hist(log(df_p1$up_refer_count+1))
+hist(df_p1$foundation)
+hist(df_p1$extension)
+hist(df_p1$generalization)
+
+# remove outlier
+df_p1_no_outlier = subset(df_p1, citation_count < exp(5) & up_refer_count < exp(5) & foundation < 0.8)
+df_p1_no_outlier$year_index = df_p1_no_outlier$pub_year - 1945
+
+
+
+model_p1_f = feols(foundation~
+                 log(up_refer_count + 1)
+                + log(citation_count + 1)
+                + year_index
+                | top_concept
+                ,data = df_p1_no_outlier)
+summary(model_p1_f)
+
+
+
+
+model_p1_e = feols(extension~
+                 log(up_refer_count + 1)
+                + log(citation_count + 1)
+                + year_index
+                | top_concept
+
+                ,data = df_p1_no_outlier)
+summary(model_p1_e)
+
+
+
+
+model_p1_g = feols(generalization~
+                 log(up_refer_count + 1)
+                + log(citation_count + 1)
+                + year_index
+                | top_concept
+
+                ,data = df_p1_no_outlier)
+summary(model_p1_g)
+
+
+
+### the second period
+
+hist(log(df_p2$citation_count+1))
+hist(log(df_p2$up_refer_count+1))
+hist(df_p2$foundation)
+hist(df_p2$extension)
+hist(df_p2$generalization)
+
+
+df_p2_no_outlier = subset(df_p2, citation_count < exp(6) & up_refer_count < exp(5) & foundation < 0.8)
+df_p2_no_outlier$year_index = df_p2_no_outlier$pub_year - 1991
+
+
+
+
+model_p2_f = feols(foundation~
+                 log(up_refer_count + 1)
+                + log(citation_count + 1)
+                + year_index
+                | top_concept
+
+                ,data = df_p2_no_outlier)
+summary(model_p2_f)
+
+
+
+
+model_p2_e = feols(extension~
+                 log(up_refer_count + 1)
+                + log(citation_count + 1)
+                + year_index
+                | top_concept
+
+                ,data = df_p2_no_outlier)
+summary(model_p2_e)
+
+
+
+
+model_p2_g = feols(generalization~
+                 log(up_refer_count + 1)
+                + log(citation_count + 1)
+                + year_index
+                | top_concept
+
+                ,data = df_p2_no_outlier)
+summary(model_p2_g)
+
+
+```
+
+
+
+
+
+
+
+### The relationship between F, E, G index and cross-paper distance (reference and title)  (Replicate Table S5)
+```{r}
+
+library(data.table)
+library(modelsummary)
+library(stargazer)
+library(fixest)
+
+# for title and reference
+# input: combine_cross_dist.py full (not by-domain) output; columns already match.
+df <- fread("../openalex/data/cited_reference_text_distance_citing_t/merged_dist_min_y_1951_max_y_2020_p_l_5_r_t_1_c_t_5_title.csv", select = c("pub_year", "citation_count", "up_refer_count", "pillar_ratio", "extension_ratio", "generalization_ratio", "refer_dist_mean", "title_dist_mean"))
+
+
+hist(log(df$citation_count+1))
+hist(log(df$up_refer_count+1))
+hist(df$pillar_ratio)
+hist(df$extension_ratio)
+hist(df$generalization_ratio)
+hist(df$refer_dist_mean)
+hist(df$title_dist_mean)
+
+df_no_outliter = subset(df, citation_count < exp(6)
+                          & up_refer_count < exp(5)
+                          & pillar_ratio < 0.8
+                          & refer_dist_mean < 0.4
+                          & title_dist_mean < 0.3
+                          & title_dist_mean > 0.05)
+
+
+
+model_foundation = feols(scale(pillar_ratio)~
+                    + log(up_refer_count + 1)
+                    + log(citation_count + 1)
+                    + scale(title_dist_mean)
+                    + scale(refer_dist_mean)
+                    | pub_year
+                    , data = df_no_outliter)
+summary(model_foundation)
+
+
+
+model_extension = feols(scale(extension_ratio)~
+                    + log(up_refer_count + 1)
+                    + log(citation_count + 1)
+                    + scale(title_dist_mean)
+                    + scale(refer_dist_mean)
+                    | pub_year
+                    , data = df_no_outliter)
+summary(model_extension)
+
+
+
+
+
+model_gen = feols(scale(generalization_ratio)~
+                    + log(up_refer_count + 1)
+                    + log(citation_count + 1)
+
+                    + scale(title_dist_mean)
+                    + scale(refer_dist_mean)
+                    | pub_year
+                    , data = df_no_outliter)
+summary(model_gen)
+
+
+
+```
+
+
+
+### The relationship between F, E, G index and within-paper distance (title and references) (Replicate Table S6)
+```{r}
+library(data.table)
+library(modelsummary)
+library(stargazer)
+library(fixest)
+
+# for title and reference
+# input: get_combine_within_dist.py non-by-domain output (by_domain_type=None,
+# the _no_abs full table); columns already match.
+df <- fread("../openalex/data/merged_stats/merged_dist_min_y_1951_max_y_2025_p_l_5_r_t_1_c_t_5_no_abs.csv", select = c("pub_year", "citation_count", "up_refer_count", "pillar_ratio", "extension_ratio", "generalization_ratio", "refer_dist_mean", "title_dist_mean", "journal_refer_count", "title_token_count"))
+
+hist(log(df$citation_count+1))
+hist(log(df$up_refer_count+1))
+hist(df$pillar_ratio)
+hist(df$extension_ratio)
+hist(df$generalization_ratio)
+hist(df$refer_dist_mean)
+hist(df$title_dist_mean)
+hist(log(df$journal_refer_count+1))
+hist(log(df$title_token_count+1))
+
+
+
+df_no_outliter = subset(df, citation_count < exp(6)
+                          & up_refer_count < exp(5)
+                          & pillar_ratio < 0.8
+                          & refer_dist_mean < 0.4
+                          & title_dist_mean > 0.1
+                          & title_dist_mean < 0.35
+                          & journal_refer_count < exp(5)
+                          & title_token_count > exp(1)
+                          & title_token_count < exp(3.5))
+
+t = subset(df, citation_count > 1000& up_refer_count < exp(5)
+                          & pillar_ratio < 0.8
+                          & refer_dist_mean < 0.4
+                          & title_dist_mean > 0.1
+                          & title_dist_mean < 0.35
+                          & journal_refer_count < exp(5)
+                          & title_token_count > exp(1)
+                          & title_token_count < exp(3.5))
+
+
+model_foundation = feols(scale(pillar_ratio)~
+                    + log(up_refer_count + 1)
+                    # + log(citation_count + 1)
+                    + log(journal_refer_count + 1)
+                    + log(title_token_count + 1)
+                    + scale(title_dist_mean)
+                    + scale(refer_dist_mean)
+                    | pub_year
+                    , data = df_no_outliter)
+summary(model_foundation)
+summary(df_no_outliter$title_token_count)
+
+
+model_extension = feols(scale(extension_ratio)~
+                    + log(up_refer_count + 1)
+                    # + log(citation_count + 1)
+                    + log(journal_refer_count + 1)
+                    + log(title_token_count + 1)
+                    + scale(title_dist_mean)
+                    + scale(refer_dist_mean)
+                    | pub_year
+                    , data = df_no_outliter)
+summary(model_extension)
+
+
+
+
+
+model_gen = feols(scale(generalization_ratio)~
+                    + log(up_refer_count + 1)
+                    # + log(citation_count + 1)
+                    + log(journal_refer_count + 1)
+                    + log(title_token_count + 1)
+
+                    + scale(title_dist_mean)
+
+                    + scale(refer_dist_mean)
+
+                    | pub_year
+                    , data = df_no_outliter)
+summary(model_gen)
+
+
+summary(scale(df_no_outliter$title_dist_mean))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

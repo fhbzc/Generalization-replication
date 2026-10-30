@@ -1,0 +1,14 @@
+# record-level data: not on GitHub (detailed_data_public_release goes to Zenodo)
+detailed_data/
+detailed_data_public_release/
+*/data/
+
+__pycache__/
+*.pyc
+.Rhistory
+.RData
+.Rproj.user/
+.ipynb_checkpoints/
+.DS_Store
+
+*.stackdump

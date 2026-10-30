@@ -1,0 +1,285 @@
+### Config
+```{r}
+library(data.table)
+library(fixest)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+
+# ── Outcome selection ─────────────────────────────────────────────────────────
+# Choose one: "avg_g" | "title_distance" | "ref_distance" | "cross_domain" | "keyword"
+# "keyword" is special: the panel holds one kw_<keyword>_rate column per keyword
+# (from did_analysis_paper_keyword.py) and every one of them is estimated in turn.
+dataset <- "keyword"
+
+# ── Parameters (must match did_analysis*.py) ──────────────────────────────────
+k                     <- 3
+min_papers_per_year   <- 2
+same_domain_control   <- FALSE   # TRUE: samedomain, FALSE: anydomain
+reference_threshold   <- 1
+citation_threshold    <- 1
+min_year              <- 1950
+max_year              <- 2025 - k
+MIN_FSO_YEAR          <- 1990
+
+# Resolve paths relative to THIS .Rmd's location (not the working directory), so it
+# works whether knit or run interactively in RStudio.
+rmd_dir <- tryCatch(
+  dirname(normalizePath(knitr::current_input())),
+  error = function(e) {
+    if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+      dirname(normalizePath(rstudioapi::getSourceEditorContext()$path))
+    } else {
+      getwd()
+    }
+  }
+)
+
+# Input DiD panels from did_analysis_paper_*.py: META_DIRE/full_text_online_analysis
+data_dire <- file.path(rmd_dir, "..", "data", "full_text_online_analysis")
+# Output event-study coefficient CSVs go to the R_generated subdir, where
+# plot_event_study.py reads them (META_DIRE/full_text_online_analysis/R_generated).
+save_dire <- file.path(data_dire, "R_generated")
+dir.create(save_dire, showWarnings = FALSE, recursive = TRUE)
+
+# One event-study figure per outcome is written here -- for dataset == "keyword"
+# that is one file per keyword. Same folder plot_event_study.py writes to
+# (openalex/figures/full_text_online_analysis).
+fig_dire <- file.path(rmd_dir, "..", "figures", "full_text_online_analysis")
+dir.create(fig_dire, showWarnings = FALSE, recursive = TRUE)
+FIG_EXT    <- "png"   # "png" | "pdf" | "svg" (svg needs the svglite package)
+FIG_WIDTH  <- 6
+FIG_HEIGHT <- 4
+
+domain_tag <- if (same_domain_control) "samedomain" else "anydomain"
+
+# ── Dataset configurations ────────────────────────────────────────────────────
+all_cfg <- list(
+  avg_g = list(
+    file_mid    = "",
+    outcome_var = "avg_g",
+    controls    = "avg_log_citation_y5 + avg_log_up_refer_count + log_paper_count",
+    label       = "avg_g"
+  ),
+  title_distance = list(
+    file_mid    = "paper_title_distance_",
+    outcome_var = "avg_title_distance_y5",
+    controls    = "avg_log_citation_y5 + avg_log_up_refer_count + log_paper_count",
+    label       = "avg title distance (y5)"
+  ),
+  ref_distance = list(
+    file_mid    = "paper_ref_distance_",
+    outcome_var = "avg_ref_distance_y5",
+    controls    = "avg_log_citation_y5 + avg_log_up_refer_count + log_paper_count",
+    label       = "avg ref distance"
+  ),
+  cross_domain = list(
+    file_mid    = "paper_cross_domain_",
+    outcome_var = "avg_cross_domain_ratio_y5",
+    controls    = "avg_log_citation_y5 + avg_log_up_refer_count + log_paper_count",
+    label       = "cross-domain ratio"
+  ),
+  keyword = list(
+    file_mid    = "paper_keyword_",
+    outcome_var = NA_character_,   # resolved after loading: every kw_*_rate column
+    controls    = "avg_log_citation_y5 + avg_log_up_refer_count + log_paper_count",
+    label       = "P(keyword in title)"
+  )
+)
+
+cfg <- all_cfg[[dataset]]
+outcome_var <- cfg$outcome_var
+
+input_file <- file.path(
+  data_dire,
+  paste0("did_panel_", cfg$file_mid, domain_tag,
+         "_k", k,
+         "_mpy", min_papers_per_year,
+         "_rt", reference_threshold,
+         "_ct", citation_threshold,
+         "_miny", min_year,
+         "_maxy", max_year,
+         ".csv")
+)
+
+cat("dataset:", dataset, "\n")
+cat("outcome_var:", outcome_var, "\n")
+cat("input_file:", input_file, "\n")
+cat("k:", k, "\n")
+cat("same_domain_control:", same_domain_control, "\n")
+cat("min_papers_per_year:", min_papers_per_year, "\n")
+
+# ── Helper: extract fixest coef table with CI ─────────────────────────────────
+get_coefs_fixest <- function(model) {
+  ct <- as.data.frame(coeftable(model))
+  ct$term <- rownames(ct)
+  colnames(ct)[1:4] <- c("estimate", "std.error", "statistic", "p.value")
+  ci <- as.data.frame(confint(model))
+  ci$term <- rownames(ci)
+  colnames(ci)[1:2] <- c("conf.low", "conf.high")
+  merge(ct, ci, by = "term")
+}
+```
+
+### Load & prepare data
+```{r}
+df <- fread(input_file)
+cat("rows loaded:", nrow(df), "\n")
+
+# Derived controls
+df[, log_paper_count := log(paper_count + 1)]
+
+# Factors for fixed effects
+df[, venue_issn_f     := as.factor(venue_issn)]
+df[, treatment_year_f := as.factor(treatment_year)]
+df[, top_domain_f     := as.factor(top_domain)]
+df[, year_index_f     := as.factor(year_index)]
+
+# treated: is_control == 0
+df[, treated := as.integer(is_control == 0)]
+
+cat("treatment venues:", df[is_control == 0, uniqueN(venue_issn)], "\n")
+cat("control  venues:", df[is_control == 1, uniqueN(venue_issn)], "\n")
+cat("year_index range:", range(df$year_index), "\n")
+
+# ── Outcomes to estimate ──────────────────────────────────────────────────────
+# Every dataset but "keyword" has a single outcome; "keyword" has one column per
+# keyword, so the event study below runs once per column.
+if (dataset == "keyword") {
+  outcome_vars <- grep("^kw_.*_rate$", names(df), value = TRUE)
+  stopifnot(length(outcome_vars) > 0)
+  # kw_<keyword>_rate -> <keyword>, used for labels and coefficient file names
+  outcome_keys   <- sub("_rate$", "", sub("^kw_", "", outcome_vars))
+  outcome_mids   <- paste0(cfg$file_mid, outcome_keys, "_")
+  outcome_labels <- paste0("P('", outcome_keys, "' in title)")
+} else {
+  outcome_vars   <- cfg$outcome_var
+  outcome_mids   <- cfg$file_mid
+  outcome_labels <- cfg$label
+}
+cat("outcomes to estimate:", length(outcome_vars), "\n")
+print(outcome_vars)
+```
+
+### Regression (event study) + plot
+One model per outcome: a single one for the scalar datasets, one per keyword for
+`dataset == "keyword"`.
+```{r}
+df[, year_index_f := relevel(year_index_f, ref = "-1")]
+
+models   <- list()
+coef_tbl <- list()
+
+for (i in seq_along(outcome_vars)) {
+  ov    <- outcome_vars[i]
+  label <- outcome_labels[i]
+  mid   <- outcome_mids[i]
+
+  fml <- as.formula(paste0(
+    "scale(", ov, ") ~ treated * year_index_f + ",
+    cfg$controls,
+    " | venue_issn_f + treatment_year_f"
+  ))
+
+  m <- tryCatch(
+    feols(fml, cluster = ~ venue_issn_f, data = df),
+    error = function(e) { cat("SKIPPED", ov, "->", conditionMessage(e), "\n"); NULL }
+  )
+  if (is.null(m)) next
+  models[[ov]] <- m
+
+  cat("\n================ ", ov, " (", label, ") ================\n", sep = "")
+  print(summary(m))
+
+  int_fe <- get_coefs_fixest(m) %>%
+    filter(str_detect(term, "^treated:year_index_f")) %>%
+    mutate(ri = as.integer(str_extract(term, "-?\\d+$")))
+
+  # Add reference period at -1 (estimate = 0, omitted by fixest)
+  int_fe <- bind_rows(
+    int_fe,
+    data.frame(term = NA, estimate = 0, std.error = NA,
+               statistic = NA, p.value = NA,
+               conf.low = 0, conf.high = 0, ri = -1L)
+  ) %>% arrange(ri)
+  coef_tbl[[ov]] <- int_fe
+
+  # Save event-study coefficients
+  out_coef <- file.path(
+    save_dire,
+    paste0("event_study_coefs_", mid, domain_tag,
+           "_k", k,
+           "_mpy", min_papers_per_year,
+           "_rt", reference_threshold,
+           "_ct", citation_threshold,
+           ".csv")
+  )
+  write.csv(
+    int_fe[, c("ri", "estimate", "conf.low", "conf.high")],
+    out_coef, row.names = FALSE
+  )
+  cat("Saved coefs to:", out_coef, "\n")
+
+  p <- ggplot(int_fe, aes(x = ri, y = estimate)) +
+    geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2, fill = "steelblue") +
+    geom_line(size = 1, color = "steelblue") +
+    geom_point(size = 2, color = "steelblue") +
+    geom_vline(xintercept = -0.5, linetype = "dashed") +
+    geom_hline(yintercept = 0,    linetype = "dotted") +
+    labs(
+      title = paste0("DID Event Study: ", label, "  (k=", k, ", mpy=", min_papers_per_year, ")"),
+      x     = "Year Index (relative to treatment year)",
+      y     = "Estimated Coefficient (treated × year_index)"
+    ) +
+    theme_minimal()
+  print(p)
+
+  # one figure per outcome (per keyword when dataset == "keyword")
+  out_fig <- file.path(
+    fig_dire,
+    paste0("event_study_", mid, domain_tag,
+           "_k", k,
+           "_mpy", min_papers_per_year,
+           "_rt", reference_threshold,
+           "_ct", citation_threshold,
+           ".", FIG_EXT)
+  )
+  ggsave(out_fig, plot = p, width = FIG_WIDTH, height = FIG_HEIGHT, dpi = 300)
+  cat("Saved figure to:", out_fig, "\n")
+}
+```
+
+### Post-vs-pre summary across outcomes
+A single post-treatment DID coefficient per outcome — for `dataset == "keyword"`
+this is the table that says which keywords the intervention moved.
+```{r}
+df[, post := as.integer(year_index >= 0)]
+
+post_tbl <- rbindlist(lapply(seq_along(outcome_vars), function(i) {
+  ov <- outcome_vars[i]
+  if (is.null(models[[ov]])) return(NULL)
+  fml <- as.formula(paste0(
+    "scale(", ov, ") ~ treated * post + ", cfg$controls,
+    " | venue_issn_f + treatment_year_f"
+  ))
+  m <- tryCatch(feols(fml, cluster = ~ venue_issn_f, data = df), error = function(e) NULL)
+  if (is.null(m)) return(NULL)
+  ct <- as.data.frame(coeftable(m))
+  r  <- ct["treated:post", ]
+  data.table(outcome = ov, label = outcome_labels[i],
+             estimate = r[[1]], std.error = r[[2]],
+             statistic = r[[3]], p.value = r[[4]])
+}))
+
+post_tbl <- post_tbl[order(p.value)]
+print(post_tbl)
+
+out_post <- file.path(
+  save_dire,
+  paste0("did_post_effects_", cfg$file_mid, domain_tag,
+         "_k", k, "_mpy", min_papers_per_year,
+         "_rt", reference_threshold, "_ct", citation_threshold, ".csv")
+)
+fwrite(post_tbl, out_post)
+cat("Saved post-vs-pre effects to:", out_post, "\n")
+```

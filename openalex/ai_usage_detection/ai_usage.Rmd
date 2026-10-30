@@ -1,0 +1,147 @@
+### Config
+```{r}
+library(data.table)
+library(fixest)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+
+# ── Set parameters here; all filenames derive from them ───────────────────────
+ai_threshold <- 0.1
+random_seed  <- 42
+# "g_ratio" | "cross_domain_ratio" | "refer_dist" | "title_dist"
+outcome      <- "title_dist"
+
+ai_threshold_str <- gsub("\\.", "p", as.character(ai_threshold))
+
+# Resolve paths relative to THIS .Rmd's location (not the working directory), so it
+# works whether knit or run interactively in RStudio.
+rmd_dir <- tryCatch(
+  dirname(normalizePath(knitr::current_input())),
+  error = function(e) {
+    if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+      dirname(normalizePath(rstudioapi::getSourceEditorContext()$path))
+    } else {
+      getwd()
+    }
+  }
+)
+
+# input: output of get_author_adopt_time_no_cid.py (AI_USAGE_DIRE/processed in utils.py)
+data_dire <- file.path(rmd_dir, "..", "data", "llm_usage_dection", "processed")
+# output: META_DIRE/llm_usage_dection/R_generated
+save_dire <- file.path(rmd_dir, "..", "data", "llm_usage_dection", "R_generated")
+dir.create(save_dire, showWarnings = FALSE, recursive = TRUE)
+
+cat("ai_threshold :", ai_threshold, "\n")
+cat("random_seed  :", random_seed,  "\n")
+cat("outcome      :", outcome,      "\n")
+
+# ── Helper: extract fixest coefficients + CI ──────────────────────────────────
+get_coefs_fixest <- function(model) {
+  ct <- as.data.frame(coeftable(model))
+  ct$term <- rownames(ct)
+  colnames(ct)[1:4] <- c("estimate", "std.error", "statistic", "p.value")
+  ci <- as.data.frame(confint(model))
+  ci$term <- rownames(ci)
+  colnames(ci)[1:2] <- c("conf.low", "conf.high")
+  merge(ct, ci, by = "term")
+}
+
+# ── Helper: run DID for one dataset ───────────────────────────────────────────
+run_did <- function(dataset_name, paper_count_threshold) {
+
+  # ── Load data ────────────────────────────────────────────────────────────────
+  fname <- paste0(dataset_name, "_ait", ai_threshold_str,
+                  "_seed", random_seed, "_", outcome, "_panel_data.csv")
+  fpath <- file.path(data_dire, fname)
+  if (!file.exists(fpath)) {
+    message("File not found, skipping: ", fpath)
+    return(invisible(NULL))
+  }
+  df <- fread(fpath)
+  df <- subset(df, pub_year >= 2018 & pub_year < 2025)
+  df_t <- subset(df,
+    relative_index > -paper_count_threshold - 1 &
+    relative_index <  paper_count_threshold &
+    before_adoption_paper_count >= paper_count_threshold &
+    after_adoption_paper_count  >= paper_count_threshold
+  )
+  cat("\n===", toupper(dataset_name), "| outcome:", outcome,
+      "| pct:", paper_count_threshold, "===\n")
+  cat("rows in df_t:", nrow(df_t), "\n")
+
+  # ── Regression (reference period = -1) ───────────────────────────────────────
+  df_t$ri_fac <- relevel(factor(df_t$relative_index), ref = "-1")
+  fml <- as.formula(paste0(
+    "scale(", outcome, ") ~",
+    "  treatment_flag * ri_fac",
+    "+ ri_fac",
+    "+ log(up_refer_count + 1)",
+    "| author + pub_month"
+  ))
+  m <- feols(fml, cluster = ~ author, data = df_t)
+  print(summary(m))
+
+  # ── Event-study coefficients ─────────────────────────────────────────────────
+  coefs <- get_coefs_fixest(m)
+  int_fe <- coefs %>%
+    filter(str_detect(term, "treatment_flagTRUE:ri_fac")) %>%
+    mutate(ri = as.integer(str_extract(term, "-?\\d+$")))
+
+  # add reference point at -1 with estimate = 0
+  int_fe <- bind_rows(
+    int_fe,
+    data.frame(term = NA, estimate = 0, std.error = NA,
+               statistic = NA, p.value = NA,
+               conf.low = 0, conf.high = 0, ri = -1L)
+  ) %>% arrange(ri)
+
+  # ── Save CSV for Python plotting ──────────────────────────────────────────────
+  int_fe_save <- int_fe[, c("ri", "estimate", "conf.low", "conf.high")]
+  colnames(int_fe_save) <- c("ri", "estimate", "conf_low", "conf_high")
+  out_csv <- file.path(save_dire,
+    paste0(dataset_name, "_event_study_pct", paper_count_threshold,
+           "_ait", ai_threshold_str, "_seed", random_seed,
+           "_", outcome, ".csv")
+  )
+  write.csv(int_fe_save, out_csv, row.names = FALSE)
+  cat("Saved:", out_csv, "\n")
+
+  # ── ggplot (event study) ──────────────────────────────────────────────────────
+  p <- ggplot(int_fe, aes(x = ri, y = estimate)) +
+    annotate("rect", xmin = -0.6, xmax = -0.4,
+             ymin = -Inf, ymax = Inf, fill = "gray", alpha = 0.15) +
+    geom_hline(yintercept = 0, linetype = "dotted", color = "gray") +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                  width = 0.2, color = "black", linewidth = 0.6) +
+    geom_point(size = 2, color = "black") +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 8)) +
+    labs(
+      title = paste0(toupper(dataset_name), " | ", outcome,
+                     " (threshold=", ai_threshold, ")"),
+      x     = "Paper order relative to first adoption",
+      y     = paste0("scaled(", outcome, ")")
+    ) +
+    theme_minimal() +
+    theme(panel.grid.minor = element_blank())
+  print(p)
+
+  invisible(list(model = m, int_fe = int_fe))
+}
+```
+
+### biorxiv
+```{r}
+res_bio <- run_did("biorxiv", paper_count_threshold = 3)
+```
+
+### ssrn
+```{r}
+res_ssrn <- run_did("ssrn", paper_count_threshold = 2)
+```
+
+### arxiv
+```{r}
+res_arxiv <- run_did("arxiv", paper_count_threshold = 3)
+```

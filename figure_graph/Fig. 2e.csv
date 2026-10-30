@@ -1,0 +1,10 @@
+metric,group,value
+Cross-Domain,Foundation,-0.1098301161280271
+Cross-Domain,Extension,-0.5539982561090807
+Cross-Domain,Generalization,1.1401358892227815
+Semantic Distance,Foundation,0.030151035248534967
+Semantic Distance,Extension,-0.15618843832726945
+Semantic Distance,Generalization,0.1548494359006146
+Reference Distance,Foundation,0.10604502525477055
+Reference Distance,Extension,-0.49134467238895235
+Reference Distance,Generalization,0.8400181333835343
