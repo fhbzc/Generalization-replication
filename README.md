@@ -103,8 +103,8 @@ parentheses are percentiles within the same year and domain.
 (18,367 reviews from "annual review" venues and their 1,319,022 references). Each index is
 converted to a quantile within publication year and domain, and the curves show the
 distribution of those quantiles. The cited references, which are presumably influential prior
-work, rank higher on **Foundation** (mean quantile 0.598 vs 0.461). Reviews, which are read and
-cited broadly, rank higher on **Generalization** (0.539 vs 0.423). The disruption index ranks the
+work, rank higher on **Foundation** (mean quantile 0.598 vs 0.461). The reviews rank higher on
+**Generalization** (0.539 vs 0.423). The disruption index ranks the
 reviews *above* the work they review (0.474 vs 0.436).
 
 <p align="center"><img src="docs/figures/ed5a_disruption_comparison.png" width="75%" alt="Extended Data Fig. 5a: indices compared with disruption"></p>
