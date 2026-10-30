@@ -23,76 +23,102 @@ within disciplines to between them.
 
 ## The idea: three ways a paper gets used
 
-Each paper that cites a focal paper (within 5 years) is classified by where it sits in the
-focal paper's local citation network. We count how many of the focal paper's own **references**
-it also cites (upstream) and how many of the focal paper's **other citing papers** it also cites
-(downstream).
+<p align="center"><img src="docs/figures/fig1a_concept.png" width="520" alt="Fig. 1a: the F, E and G citation types"></p>
 
-```mermaid
-flowchart BT
-    subgraph EXT["Extension: upstream > downstream"]
-        direction BT
-        C1["citing paper"] --> P1(("focal"))
-        P1 --> R1["focal's reference"]
-        C1 --> R1
-    end
-    subgraph FND["Foundation: downstream > upstream"]
-        direction BT
-        C2["citing paper"] --> P2(("focal"))
-        D2["another citer of focal"] --> P2
-        C2 --> D2
-    end
-    subgraph GEN["Generalization: neither"]
-        direction BT
-        C3["citing paper"] --> P3(("focal"))
-        P3 --> R3["focal's reference"]
-        D3["another citer of focal"] --> P3
-    end
-```
-<sub>Arrows mean "cites".</sub>
+Each paper that cites a focal paper (blue diamond) is classified by where it sits in the focal
+paper's local citation network. We count how many of the focal paper's **other citing papers**
+it also cites (e<sub>i</sub>, downstream) and how many of the focal paper's own **references** it
+also cites (e<sub>j</sub>, upstream).
 
-- **Extension (E)**: the citing paper continues the line of work the focal paper itself built on.
-- **Foundation (F)**: the citing paper joins a community building on the focal paper, which
-  becomes a shared foundation.
-- **Generalization (G)**: the citing paper is connected to none of the focal paper's
-  neighbourhood. The idea has been carried into a new context.
+- **Foundation (F)**, e<sub>i</sub> > e<sub>j</sub>: the citing paper mostly cites other papers
+  that build on the focal paper, treating it as a foundational work.
+- **Extension (E)**, e<sub>i</sub> < e<sub>j</sub>: the citing paper mostly cites the work the
+  focal paper itself built on, treating it as an extension of earlier foundations.
+- **Generalization (G)**, e<sub>i</sub> = e<sub>j</sub> = 0: the citing paper cites none of the
+  focal paper's references or citers, treating it as a general tool or background.
 
-Ties are split 0.5 / 0.5 between E and F. Each index is the share of the focal paper's citations
-of that kind, so F + E + G = 1.
+A paper's F, E and G indices are the shares of its citations of each type, so F + E + G = 1
+(ties are split 0.5 / 0.5 between F and E).
 
-## Key results
+## Main result: the rise of generalization
 
-**The rise of generalization.** Yearly mean of the three indices by publication year, in
-OpenAlex (solid) and Web of Science (dashed). Foundation falls steadily. Extension peaks in the
-mid-1990s and then declines, and Generalization rises sharply after the 1990s. The two corpora
-agree closely.
+<p align="center"><img src="docs/figures/fig3a_trend.png" alt="Fig. 3a: F, E, G indices over time"></p>
 
-![Fig. 3a](figure_graph/Fig.%203a.svg)
-<sub>`figure_graph/Fig. 3a.svg`, drawn by `combine_wos_openalex/plot_longitudional_change.py`.</sub>
+**Fig. 3a.** Yearly mean F (left axis), E and G (right axis) by publication year in OpenAlex
+(solid) and Web of Science (dashed), using citations in the first year after publication.
+Foundation falls steadily. Extension peaks in the mid-1990s and then declines, while
+Generalization turns sharply upward after the 1990s. The two corpora agree closely.
 
-**Not an artefact of the citation network.** Observed indices (colour) against the same indices
-on a randomized citation network (grey) that keeps each paper's citation counts and venue
-fixed. Insets show the change since 1990. Generalization rises by about 0.2 in the observed
-network, while the randomized network moves far less.
+<p align="center"><img src="docs/figures/fig3b_observed_vs_randomized.png" alt="Fig. 3b: observed vs randomized citation networks"></p>
 
-![Fig. 3b](figure_graph/Fig.%203b.svg)
-<sub>`figure_graph/Fig. 3b.svg`, drawn by `combine_wos_openalex/visualize_efg_obs_vs_single_iter_control_venue_combined.py`.</sub>
+**Fig. 3b.** The same indices in the observed citation network (colour) and in randomized
+networks (grey), in which citation links are reshuffled while approximately preserving each
+paper's degree within publication year and venue. Insets show the change since 1990.
+Generalization rises by about 0.2 in the observed network and far less in the randomized
+one, so the trend is not produced by growth or degree structure alone.
 
-**Validation against distance.** Median index across bins of reference distance (venue
-embeddings) and semantic distance (title embeddings). The three indices occupy different
-regions of the distance space.
+## What does generalization capture?
 
-![Fig. 2b](figure_graph/Fig.%202b.svg)
-<sub>`figure_graph/Fig. 2b.svg`, drawn by `openalex/heatmap/visualize_within_dist_heatmap.py`.</sub>
+<table>
+<tr>
+<td width="34%"><img src="docs/figures/fig1e_foundation_vs_generalization.png" alt="Fig. 1e"></td>
+<td><img src="docs/figures/fig2c_diffusion.png" alt="Fig. 2c"></td>
+</tr>
+<tr>
+<td valign="top"><b>Fig. 1e.</b> A <i>field-defining</i> paper is cited by works in one densely
+connected research topic, so its citations are mostly foundational. A <i>general-purpose
+catalyst</i> is cited by works that are not connected to each other, so its citations are
+generalizations spread across independent research trajectories.</td>
+<td valign="top"><b>Fig. 2c.</b> The top 10% F, E and G papers, grouped by citation count
+(marker size). G papers are cited from many more topics (left) and countries (right), and
+less of their citation comes from a single dominant topic or country.</td>
+</tr>
+</table>
 
-**Paper-level data.** The distribution of the three indices in the Zenodo release is almost
-identical between OpenAlex and Semantic Scholar.
+<p align="center"><img src="docs/figures/fig2f_citation_purpose.png" alt="Fig. 2f: citation purposes" width="85%"></p>
 
-![E/F/G distribution](figure_graph/efg_distribution.png)
-<sub>`figure_graph/efg_distribution.png`, drawn by `openalex/feg_distribution/plot_efg_distribution_public_release.py`.</sub>
+**Fig. 2f.** Citation purposes in NLP papers, from a classifier applied to the citation
+context, for foundational (F), extensional (E), generalizational (G) and disruptive (D)
+citations. Generalization citations are mentioned least often per citing paper and are most
+often about *using* the work or pointing to *future* work. Extension citations are dominated by
+*intent to modify*. Disruptive citations look much like generalization citations.
 
-Every figure in the paper is in [`figure_graph/`](figure_graph), together with the CSV of the
-numbers it plots.
+## Generalization, foundation and disruption
+
+The disruption index treats a paper as disruptive when later work cites it without citing its
+predecessors. The F / E / G indices separate two very different kinds of "disruptive" papers.
+
+<p align="center"><img src="docs/figures/fig2a_disruptive_examples.png" width="600" alt="Fig. 2a: highly disruptive papers from foundational to generalizational"></p>
+
+**Fig. 2a.** Five highly disruptive papers (all above the 82nd percentile of disruption),
+arranged from most foundational to most generalizational, with their downstream citation trees.
+CRISPR (left, top) has a deep, narrow tree: research keeps building on it generation after
+generation (Foundation 0.89, 100th percentile). ImageJ (right, top) has a shallow, broad tree:
+it is used by many unconnected works (Generalization 0.79, 98.9th percentile). Values in
+parentheses are percentiles within the same year and domain.
+
+<p align="center"><img src="docs/figures/ed5a_disruption_comparison.png" width="75%" alt="Extended Data Fig. 5a: indices compared with disruption"></p>
+
+**Extended Data Fig. 5a.** How well each index separates landmark papers from comparison papers:
+Nobel Prize papers vs other papers, major-award papers vs other papers, references cited by
+annual reviews vs the reviews themselves, and papers introducing new concepts vs other papers.
+Bars show the mean quantile difference (higher = favours the landmark papers). Foundation
+separates the groups best in all four comparisons. The disruption index does so only for Nobel
+Prize papers, and Generalization, which measures broad reuse rather than field-defining
+discovery, does not.
+
+## Paper-level data
+
+<p align="center"><img src="figure_graph/efg_distribution.png" alt="Distribution of E, F, G indices in OpenAlex and Semantic Scholar"></p>
+
+Distribution of the three indices (5-year citation window) in the
+[Zenodo release](https://doi.org/10.5281/zenodo.23817258): 23.4M OpenAlex papers and 28.3M
+Semantic Scholar papers. The two corpora are almost identical.
+
+All figures in the paper are in [`figure_graph/`](figure_graph) as SVG, each with the CSV of
+the numbers it plots. The PNGs above, with white backgrounds so they also read in dark mode, are
+in [`docs/figures/`](docs/figures). Panels from Fig. 1 and Fig. 2a are taken from the arXiv
+version of the paper.
 
 ## Citation
 
@@ -110,7 +136,7 @@ numbers it plots.
 The same analysis is run independently on four corpora: OpenAlex (the main one), Web of Science,
 Semantic Scholar and MAG. Each has its own directory with its own `utils.py` and `data/` root.
 
-## Results
+### What is released
 
 - **`figure_graph/`** — every paper figure, under its panel name (`Fig. 3a.svg`,
   `Extended Data Fig. 8.svg`, ...), together with the **aggregated cache** it was drawn from:
@@ -125,7 +151,7 @@ Semantic Scholar and MAG. Each has its own directory with its own `utils.py` and
   tables) are regenerated by the pipelines below from the raw corpora. Web of Science and
   MAG are licensed / retired datasets, so only aggregated results from them are released.
 
-## Code
+### Code
 
 - **`openalex/`** — the main pipeline: metadata parsing, the F/E/G and disruption indices, and
   every downstream analysis (text, references, heatmaps, regressions, citation purpose, awards,
